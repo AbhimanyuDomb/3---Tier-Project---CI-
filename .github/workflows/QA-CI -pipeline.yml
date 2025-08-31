@@ -1,5 +1,5 @@
 
-name: Pipeline for QA
+name: updated Pipeline for QA
 
 on:
   push:
