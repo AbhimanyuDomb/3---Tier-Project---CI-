@@ -1,10 +1,11 @@
-name: Node.js CI
+
+name: updated Pipeline for QA
 
 on:
   push:
-    branches: [ main ]
+    branches: [ QA ]
   pull_request:
-    branches: [ main ]
+    branches: [ QA ]
 
 permissions:
   contents: write   # required to push to CD repo with GITHUB_TOKEN or PAT
@@ -76,7 +77,7 @@ jobs:
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set up QEMU
@@ -92,8 +93,8 @@ jobs:
           file: ./api/Dockerfile
           push: true
           tags: |
-            adijaiswal/backend:latest
-            adijaiswal/backend:${{ env.IMAGE_TAG }}
+            maestrodomb/backend:latest
+            maestrodomb/backend:${{ env.IMAGE_TAG }}
 
   build_frontend_docker_image_and_push:
     runs-on: ubuntu-latest
@@ -105,7 +106,7 @@ jobs:
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set up QEMU
@@ -121,8 +122,8 @@ jobs:
           file: ./client/Dockerfile
           push: true
           tags: |
-            adijaiswal/frontend:latest
-            adijaiswal/frontend:${{ env.IMAGE_TAG }}
+            maestrodomb/frontend:latest
+            maestrodomb/frontend:${{ env.IMAGE_TAG }}
 
   trivy_image_scan:
     runs-on: ubuntu-latest
@@ -137,7 +138,7 @@ jobs:
         uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: image
-          image-ref: adijaiswal/backend:${{ env.IMAGE_TAG }}
+          image-ref: maestrodomb/backend:${{ env.IMAGE_TAG }}
           format: table
           exit-code: '0'                 # set to '1' to fail on vulns
           ignore-unfixed: true
@@ -148,7 +149,7 @@ jobs:
         uses: aquasecurity/trivy-action@0.28.0
         with:
           scan-type: image
-          image-ref: adijaiswal/frontend:${{ env.IMAGE_TAG }}
+          image-ref: maestrodomb/frontend:${{ env.IMAGE_TAG }}
           format: table
           exit-code: '0'
           ignore-unfixed: true
@@ -162,8 +163,8 @@ jobs:
       - name: Checkout CD repo
         uses: actions/checkout@v4
         with:
-          repository: jaiswaladi246/3-Tier-GitOps-CD
-          ref: main
+          repository: AbhimanyuDomb/3---Tier-Project---CD
+          ref: Master
           token: ${{ secrets.CD_REPO_TOKEN }}
           path: cd
 
@@ -175,8 +176,8 @@ jobs:
           curl -sL https://github.com/mikefarah/yq/releases/download/v4.44.3/yq_linux_amd64 -o yq && sudo install yq /usr/local/bin/yq
 
           # -- Safety cleanup: remove any accidental .spec.template from Service docs
-          yq -i '(. | select(.kind=="Service")) |= del(.spec.template)' k8s-prod/backend.yaml
-          yq -i '(. | select(.kind=="Service")) |= del(.spec.template)' k8s-prod/frontend.yaml
+          yq -i '(. | select(.kind=="Service")) |= del(.spec.template)' k8s-QA/backend.yaml
+          yq -i '(. | select(.kind=="Service")) |= del(.spec.template)' k8s-QA/frontend.yaml
 
           # -- Update ONLY Deployment images (backend)
           yq -i '
@@ -184,8 +185,8 @@ jobs:
                | .spec.template.spec.containers[]
                | select(.name=="backend")
                | .image)
-            = "adijaiswal/backend:" + strenv(IMAGE_TAG)
-          ' k8s-prod/backend.yaml
+            = "maestrodomb/backend:" + strenv(IMAGE_TAG)
+          ' k8s-QA/backend.yaml
 
           # -- Update ONLY Deployment images (frontend)
           yq -i '
@@ -193,14 +194,26 @@ jobs:
                | .spec.template.spec.containers[]
                | select(.name=="frontend")
                | .image)
-            = "adijaiswal/frontend:" + strenv(IMAGE_TAG)
-          ' k8s-prod/frontend.yaml
+            = "maestrodomb/frontend:" + strenv(IMAGE_TAG)
+          ' k8s-QA/frontend.yaml
 
-      - name: Commit & push to CD repo
+      - name: Commit & push to CD repo (direct)
         working-directory: cd
+        env:
+          CD_REPO_TOKEN: ${{ secrets.CD_REPO_TOKEN }}
         run: |
           git config user.name "ci-bot"
           git config user.email "ci-bot@users.noreply.github.com"
           git add -A
-          git commit -m "bump images to ${IMAGE_TAG}" || echo "no changes"
-          git push
+          # Skip if nothing changed to avoid empty commit & push
+          if git diff --cached --quiet; then
+            echo "no changes; skipping push"
+            exit 0
+          fi
+          git commit -m "bump images to ${IMAGE_TAG}"
+          # Use PAT and push to the correct branch name (Master in your repo)
+          git remote set-url origin https://x-access-token:${CD_REPO_TOKEN}@github.com/AbhimanyuDomb/3---Tier-Project---CD.git
+          git push origin HEAD:Master
+
+
+     
