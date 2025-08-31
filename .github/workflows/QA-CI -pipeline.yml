@@ -197,13 +197,23 @@ jobs:
             = "maestrodomb/frontend:" + strenv(IMAGE_TAG)
           ' k8s-QA/frontend.yaml
 
-      - name: Commit & push to CD repo
+      - name: Commit & push to CD repo (direct)
         working-directory: cd
+        env:
+          CD_REPO_TOKEN: ${{ secrets.CD_REPO_TOKEN }}
         run: |
           git config user.name "ci-bot"
           git config user.email "ci-bot@users.noreply.github.com"
           git add -A
-          git commit -m "bump images to ${IMAGE_TAG}" || echo "no changes"
-          git push https://x-access-token:$CD_REPO_TOKEN@github.com/AbhimanyuDomb/3---Tier-Project---CD.git HEAD:Master
-        env:
-         CD_REPO_TOKEN: ${{ secrets.CD_REPO_TOKEN }}
+          # Skip if nothing changed to avoid empty commit & push
+          if git diff --cached --quiet; then
+            echo "no changes; skipping push"
+            exit 0
+          fi
+          git commit -m "bump images to ${IMAGE_TAG}"
+          # Use PAT and push to the correct branch name (Master in your repo)
+          git remote set-url origin https://x-access-token:${CD_REPO_TOKEN}@github.com/AbhimanyuDomb/3---Tier-Project---CD.git
+          git push origin HEAD:Master
+
+
+     
