@@ -205,3 +205,5 @@ jobs:
           git add -A
           git commit -m "bump images to ${IMAGE_TAG}" || echo "no changes"
           git push
+        env:
+         CD_REPO_TOKEN: ${{ secrets.CD_REPO_TOKEN }}
